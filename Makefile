@@ -1,8 +1,8 @@
 TARGET = udump.tos
 
 CROSS = yes
-LIBCMINI_INCLUDE = ../libcmini.git/include
-LIBCMINI_BUILD = ../libcmini.git/build
+LIBCMINI_INCLUDE = ../libcmini/include
+LIBCMINI_BUILD = ../libcmini/build
 
 ifeq ($(CROSS),yes)
   CROSSPREFIX=m68k-atari-mint-
