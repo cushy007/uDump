@@ -24,6 +24,10 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+
+#define BLOCK_SIZE 256 // bytes
+#define FILE_SIZE  64  // KiB
 
 static long get_tos_header(void)
 {
@@ -90,6 +94,36 @@ static const char* countries[] = {
 };
 static const size_t countries_size = sizeof(countries) / sizeof(countries[0]);
 
+
+static char *save_to_file(int file_number, uintptr_t base, size_t size)
+{
+    char tos_filename[8+1+3+1] = "filename.ext";
+    char* error_str;
+    size_t i;
+    FILE* f;
+
+    sprintf(tos_filename, "tos-%d.img", file_number);
+    printf("Saving %ld KiB to %s ... ", size, tos_filename);
+    f = fopen(tos_filename, "wb");
+    error_str = "done";
+    if (f != NULL)
+    {
+		for (i = 0; i < (size * 1024L / BLOCK_SIZE); i++)
+		{
+			if (fwrite((const void*)(base + BLOCK_SIZE * i), 1, BLOCK_SIZE, f) != BLOCK_SIZE)
+			{
+				error_str = "fail";
+				break;
+			}
+			printf("\r\n");
+			printf("%ld bytes written", BLOCK_SIZE * i);
+		}
+        fclose(f);
+    }
+    return error_str;
+}
+
+
 int main(int argc, const char* argv[])
 {
     OSHEADER* tos_header;
@@ -103,10 +137,10 @@ int main(int argc, const char* argv[])
     char* machine;
     uint32_t machine_mem;
     size_t tos_size = 0;
-    char tos_filename[8+1+3+1] = "filename.ext";
     char country_code[2+1] = "";
     char* error_str;
-    FILE* f;
+    size_t i;
+    int nb_of_files;
 
     tos_header = (OSHEADER*)(Supexec(get_tos_header));
     tos_base = (uintptr_t)tos_header;
@@ -133,7 +167,7 @@ int main(int argc, const char* argv[])
         country_code[1] = country_codes[tos_country*2+1];
         country_code[2] = '\0';
     }
-    
+
     switch (mch_value) {
         case 0x00000000UL:
             machine = "Atari ST";
@@ -165,7 +199,7 @@ int main(int argc, const char* argv[])
         default:
             machine = "unknown";
     }
-    
+
     machine_mem = Supexec(get_memory_size);
 
     printf("%s %02x.%02x%s\r\n\r\n"
@@ -181,14 +215,13 @@ int main(int argc, const char* argv[])
         machine,
         machine_mem / 1024);
 
-    sprintf(tos_filename, "tos%03x%s.img", tos_version, country_code);
 
     if (tos_version < 0x0106) {
-        tos_size = 192 * 1024;
+        tos_size = 192;
     } else if (tos_version < 0x0300) {
-        tos_size = 256 * 1024;
+        tos_size = 256;
     } else if (tos_version < 0x0500) {
-        tos_size = 512 * 1024;
+        tos_size = 512;
         if (ct60_value != 0) {
             tos_size *= 2;
         }
@@ -197,29 +230,32 @@ int main(int argc, const char* argv[])
     if (is_emutos && tos_version == 0x0206) {
         /* a humble attempt to correct EmuTOS ROM size ... */
         if ((mch_value & 0xffff0000UL) > 0x00010000UL) {
-            tos_size = 512 * 1024;
+            tos_size = 512;
         }
     }
 
     if (tos_size == 0) {
-        fprintf(stderr, "Couldn't determine TOS size,\r\npress a key to exit.");
+        fprintf(stderr, "Couldn't determine TOS size,\r\npress a key to exit.\r\n");
         Cconin();
         return 1;
     }
 
     printf("\r\n");
-    printf("Saving %ld KiB to %s ... ", tos_size / 1024, tos_filename);
 
-    f = fopen(tos_filename, "wb");
-    error_str = "fail";
-    if (f != NULL) {
-        if (fwrite((const void*)tos_base, 1, tos_size, f) == tos_size) {
-            error_str = "done";
-        }
-        fclose(f);
-    }
+	nb_of_files = tos_size * 1024L / FILE_SIZE;
+	error_str = "done";
+	for (i = 0; i < nb_of_files; i++)
+	{
+		error_str = save_to_file(i, tos_base + i * FILE_SIZE, FILE_SIZE);
+		if (strcmp(error_str, "fail") == 0)
+		{
+			break;
+		}
+	}
 
     printf("%s,\r\npress a key to exit.", error_str);
     Cconin();
     return 0;
 }
+
+
